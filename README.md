@@ -22,3 +22,202 @@ I have used Excel for this part of the process and highlighted certain columns t
 - Each supplier input row could contain multiple potential entity matches.
 - Website domains and geographic consistency appeared to be strong validation signals.
 - Some supplier records contained incomplete information, increasing ambiguity.
+
+# 2. Entity Resolution Workflow
+
+After reviewing the dataset structure, I implemented a rule-based entity validation workflow to evaluate candidate company matches at scale.
+
+## Data Normalization
+
+Before validation, supplier and candidate attributes were normalized to reduce inconsistencies caused by:
+- Legal entity suffixes (`Ltd`, `Inc`, `GmbH`, `SRL`, etc.)
+- Capitalization differences
+- Formatting inconsistencies
+
+## Validation Logic
+
+The validation workflow was implemented using Python’s `SequenceMatcher` from the `difflib` library to calculate similarity scores between normalized supplier attributes and candidate entity attributes.
+
+The workflow focused on two primary validation dimensions:
+
+### 1. Company Name Similarity
+Company names were compared using:
+- Exact normalized matches
+- Partial containment checks
+- Shared word overlap logic
+
+### 2. Geographic Consistency
+Location information were validated between:
+- Supplier input records
+- Candidate company records
+
+Additional scoring bonuses were applied when normalized candidate geographic values appeared directly within the supplier input location.
+
+The weighting strategy prioritized:
+- Full location alignment
+- Geographic consistency
+- More specific regional matches
+
+# Match Classification
+
+Each candidate entity received:
+- a company name similarity score
+- a geographic similarity score
+
+These scores were then used to classify candidates into three confidence levels.
+
+### MATCH
+Candidates classified as `MATCH` represented the highest-confidence results.
+
+Conditions:
+- Name similarity score ≥ 80
+- Address similarity score ≥ 220
+
+These candidates showed high likelihood of representing the correct real-world entity
+
+Because these records satisfied both strong naming and location requirements, they were considered reliable enough for automated matching.
+
+---
+
+### MEDIUM_MATCH
+Candidates classified as `MEDIUM_MATCH` represented plausible but less certain matches.
+
+These candidates generally showed:
+- partial company name similarity
+- moderate geographic overlap
+- incomplete or less consistent supporting information
+
+This category was intended to capture suppliers that may still represent valid matches but would benefit from lighter validation or additional enrichment.
+
+---
+
+### REVIEW
+Candidates classified as `REVIEW` represented ambiguous or lower-confidence cases.
+
+These rows typically contained:
+- weak company name similarity
+- inconsistent geographic information
+- incomplete location data
+- or multiple plausible candidate entities
+
+Rather than forcing low-confidence matches, these records were separated for manual inspection to reduce the risk of false positives.
+
+## Deduplication Logic
+
+Because multiple candidate entities could satisfy the matching conditions for the same supplier input, an additional consolidation step was implemented.
+
+For each `input_row_key`, only the candidate with the highest combined confidence was retained.
+
+
+# 3. Results & Observations
+
+The dataset contained a total of 592 supplier input records.
+
+After applying the rule-based entity resolution workflow and deduplication logic, the results were distributed across three confidence categories:
+
+| Classification | Count |
+|---|---:|
+| MATCH | 168 |
+| MEDIUM_MATCH | 303 |
+| REVIEW | 121 |
+
+## Key Observations
+
+Several broader patterns became visible during the review process:
+
+- Geographic information proved to be one of the strongest validation signals.
+- Generic company names frequently produced ambiguous candidate matches.
+- Legal suffix normalization significantly improved company name comparability.
+- Some suppliers appeared to represent subsidiaries or regional entities rather than global parent organizations.
+- Multiple candidate entities occasionally matched the same supplier input, requiring additional deduplication logic.
+
+Overall, the workflow demonstrated that deterministic and explainable validation logic can effectively triage supplier entity matches while still preserving a manual review layer for ambiguous records.
+
+# 4. Data Analysis & Quality Control (QC)
+
+After selecting the strongest candidate matches, the next step was reviewing the enriched attributes for inconsistencies and overall dataset quality.
+
+## Key Data Quality Observations
+
+### 1. Naming Inconsistencies
+Several supplier records contained variations of the same company name caused by:
+- Legal entity suffixes
+- Abbreviations
+- Formatting inconsistencies
+- Regional entity naming differences
+
+Examples included:
+- Local subsidiaries vs parent organizations
+- Generic company names vs more specific business units
+
+These inconsistencies can fragment spend visibility and make supplier aggregation difficult.
+
+---
+
+### 2. Geographic Ambiguity
+Geographic information proved to be one of the strongest validation signals, but also exposed inconsistencies across records.
+
+Observed issues included:
+- Missing city or regional information
+- Different geographic granularity between supplier inputs and candidate entities
+- Multiple possible entities operating within the same country
+
+This increased ambiguity, particularly for suppliers with generic company names.
+
+---
+
+### 3. Duplicate Candidate Matches
+Some supplier inputs generated multiple plausible candidate entities.
+
+This commonly occurred when:
+- A generic company name matched several related entities
+- Parent and subsidiary entities coexisted
+- Candidate companies shared overlapping geographic information
+
+To reduce duplicate entity assignments, additional deduplication logic was introduced to retain only the highest-confidence candidate per supplier input.
+
+---
+
+### 4. Parent vs Subsidiary Relationships
+Several records appeared to represent:
+- Regional offices
+- Subsidiaries
+- Local legal entities
+rather than global parent organizations.
+
+
+A production-ready supplier master would likely require:
+- Hierarchy normalization
+- Parent-child entity mapping
+- Global ultimate parent identification
+
+---
+
+
+## Dataset Curation Recommendations
+
+Based on the observed patterns, the following curation workflow would help prepare the dataset for production use:
+
+
+### Analyst Review Layer
+Route ambiguous entities to manual review when:
+- Multiple plausible candidates exist
+- Geographic information is incomplete
+- Parent/subsidiary ambiguity is present
+
+### Deduplication & Entity Governance
+Implement:
+- Supplier hierarchy normalization
+- Duplicate supplier consolidation
+- Standardized naming conventions
+- Stable entity identifiers
+
+## Overall Assessment
+
+The dataset demonstrated that entity resolution quality improves significantly when:
+- company normalization,
+- geographic validation,
+- and explainable scoring logic
+are combined together.
+
+At the same time, the review process highlighted the importance of maintaining a manual validation layer for ambiguous supplier records, particularly in procurement environments where incorrect entity mapping can negatively impact spend visibility and sourcing decisions.
